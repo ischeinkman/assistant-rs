@@ -58,6 +58,7 @@ dependencies = [
  "crossbeam",
  "deepspeech",
  "serde",
+ "thiserror",
  "toml",
 ]
 
