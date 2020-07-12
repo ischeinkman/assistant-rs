@@ -22,11 +22,13 @@ impl SpeechLoader {
             raw_data: Vec::new(),
         }
     }
+
     pub fn time_since_change(&self) -> std::time::Duration {
         let nanos =
             ((1_000_000_000u64) * (self.samples_since_change as u64)) / (self.sample_rate as u64);
         std::time::Duration::from_nanos(nanos)
     }
+
     pub fn push(&mut self, data: &[i16]) -> Result<DidChange, deepspeech::errors::DeepspeechError> {
         self.stream.feed_audio(data);
         self.total_samples += data.len();
@@ -44,11 +46,17 @@ impl SpeechLoader {
             Ok(false)
         }
     }
+
     pub fn current_text(&self) -> &str {
         &self.current_text
     }
+
     pub fn num_samples(&self) -> usize {
         self.total_samples
+    }
+
+    pub fn finish(self) -> (String, Vec<i16>) {
+        (self.current_text, self.raw_data)
     }
 }
 
@@ -70,6 +78,7 @@ impl<T: Clone> WaitableBuffer<T> {
         lock.extend_from_slice(data);
         self.waiter.notify_all();
     }
+
     pub fn wait_until(&self, target: usize) -> Vec<T> {
         let mut lock = self.data.lock().unwrap_or_else(|e| e.into_inner());
         loop {
@@ -78,6 +87,8 @@ impl<T: Clone> WaitableBuffer<T> {
             }
             lock = self.waiter.wait(lock).unwrap_or_else(|e| e.into_inner());
         }
-        std::mem::take(&mut *lock)
+        let mut retvl = Vec::with_capacity(lock.len());
+        retvl.append(&mut lock);
+        retvl
     }
 }
