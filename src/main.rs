@@ -1,6 +1,7 @@
 mod buffer;
 mod config;
 mod metrics;
+mod utils;
 
 use buffer::{SpeechLoader, WaitableBuffer};
 use config::Config;
