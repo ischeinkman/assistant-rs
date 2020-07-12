@@ -74,6 +74,7 @@ pub struct DeepspeechConfig {
     pub library_path: Option<PathBuf>,
     pub model_path: Option<PathBuf>,
     pub scorer_path: Option<PathBuf>,
+    pub beam_width : Option<u16>, 
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]

@@ -1,5 +1,6 @@
 mod buffer;
 mod config;
+mod error;
 mod metrics;
 mod utils;
 
@@ -13,15 +14,8 @@ use std::sync::Arc;
 fn main() {
     let raw = include_str!("../res/config.toml");
     let conf: Config = toml::from_str(raw).unwrap();
-    let mut model = Model::load_from_files(
-        conf.deepspeech_config.library_path.as_ref().unwrap(),
-        conf.deepspeech_config.model_path.as_ref().unwrap(),
-    )
-    .unwrap();
+    let mut model = build_model(&conf).unwrap();
     let raw = model.get_sample_rate();
-    let strm = model.create_stream().unwrap();
-    let mut loader = SpeechLoader::new(strm, raw as u32);
-    model.set_model_beam_width(1).unwrap();
 
     let h = cpal::default_host();
     let mic = h.default_input_device().unwrap();
@@ -41,6 +35,9 @@ fn main() {
         )
         .unwrap();
     stream.play().unwrap();
+    
+    let strm = model.create_stream().unwrap();
+    let mut loader = SpeechLoader::new(strm, raw as u32);
     loop {
         let lock = buf.wait_until(raw as usize);
         if loader.push(&lock).unwrap() {
@@ -75,4 +72,29 @@ fn main() {
             loader = SpeechLoader::new(strm, raw as u32);
         }
     }
+}
+
+fn build_model(conf: &Config) -> Result<Model, error::AssistantRsError> {
+    let lib = conf
+        .deepspeech_config
+        .library_path
+        .clone()
+        .unwrap_or_else(|| {
+            let mut p = std::path::PathBuf::new();
+            p.set_file_name("libdeepspeech.so");
+            p
+        });
+    let model = conf
+        .deepspeech_config
+        .model_path
+        .as_ref()
+        .ok_or(error::ConfigError::NoModel)?;
+    let mut retvl = Model::load_from_files(lib.as_ref(), model.as_ref())?;
+    if let Some(scorer) = conf.deepspeech_config.scorer_path.as_ref() {
+        retvl.enable_external_scorer(scorer)?;
+    }
+    if let Some(w) = conf.deepspeech_config.beam_width {
+        retvl.set_model_beam_width(w)?;
+    }
+    Ok(retvl)
 }
