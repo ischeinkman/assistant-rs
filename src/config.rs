@@ -1,23 +1,15 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::utils::IterUtils;
+use crate::error::ConfigError;
+use crate::utils::StringVisitor;
 
-use arpabet::{
-    phoneme::Phoneme, Arpabet,
-};
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum PhonePart {
-    Phoneme(Phoneme),
-    Space,
-    Unknown(String),
-}
+use crate::speech::Utterance;
 
 #[derive(Debug, Clone)]
 struct CommandMessage {
     raw: String,
-    phones: Vec<PhonePart>,
+    phones: Utterance,
 }
 
 impl PartialEq for CommandMessage {
@@ -49,7 +41,7 @@ impl Command {
     pub fn message(&self) -> &str {
         &self.message.raw
     }
-    pub fn message_ap(&self) -> &[PhonePart] {
+    pub fn message_ap(&self) -> &Utterance {
         &self.message.phones
     }
     fn serialize_message<S: serde::Serializer>(
@@ -63,7 +55,12 @@ impl Command {
         deserializer: S,
     ) -> Result<CommandMessage, S::Error> {
         let raw = deserializer.deserialize_string(StringVisitor::new())?;
-        let phones = conv(&raw).collect();
+        let phones = Utterance::parse(&raw).map_err(|e| {
+            serde::de::Error::invalid_value(
+                serde::de::Unexpected::Str(&e.raw),
+                &"a message convertable to a list of phonemes",
+            )
+        })?;
         Ok(CommandMessage { raw, phones })
     }
 }
@@ -74,7 +71,44 @@ pub struct DeepspeechConfig {
     pub library_path: Option<PathBuf>,
     pub model_path: Option<PathBuf>,
     pub scorer_path: Option<PathBuf>,
-    pub beam_width : Option<u16>, 
+    pub beam_width: Option<u16>,
+}
+
+impl DeepspeechConfig {
+    pub fn library_path(&self) -> Result<&Path, ConfigError> {
+        if let Some(pt) = self.library_path.as_ref() {
+            Ok(pt.as_ref())
+        } else {
+            Ok("libdeepspeech.so".as_ref())
+        }
+    }
+    pub fn model_path(&self) -> Result<&Path, ConfigError> {
+        if let Some(pt) = self.model_path.as_ref() {
+            Ok(pt.as_ref())
+        } else {
+            Err(ConfigError::NoModel)
+        }
+    }
+    pub fn scorer_path(&self) -> Result<Option<&Path>, ConfigError> {
+        if let Some(pt) = self.scorer_path.as_ref() {
+            Ok(Some(pt.as_ref()))
+        } else {
+            Ok(None)
+        }
+    }
+    pub fn beam_width(&self) -> Result<Option<u16>, ConfigError> {
+        if let Some(bw) = self.beam_width {
+            Ok(Some(bw))
+        } else {
+            Ok(None)
+        }
+    }
+    pub fn verify(&self) -> Result<(), ConfigError> {
+        if self.model_path.is_none() {
+            return Err(ConfigError::NoModel);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -84,42 +118,12 @@ pub struct Config {
     pub commands: Vec<Command>,
 }
 
-pub fn conv<'a>(raw_msg: &'a str) -> impl Iterator<Item = PhonePart> + 'a {
-    let ap = Arpabet::load_cmudict();
-    raw_msg
-        .split_whitespace()
-        .flat_map(move |w| {
-            let nxt = match ap.get_polyphone(w) {
-                Some(pw) => pw.into_iter().map(|p| PhonePart::Phoneme(p)).left(),
-                None => std::iter::once(PhonePart::Unknown(w.to_owned())).right(),
-            };
-            std::iter::once(PhonePart::Space).chain(nxt)
-        })
-        .skip(1)
-}
-
-struct StringVisitor {}
-impl StringVisitor {
-    pub const fn new() -> Self {
-        Self {}
+impl Config {
+    pub fn verify(&self) -> Result<(), ConfigError> {
+        self.deepspeech_config.verify()?;
+        if self.commands.is_empty() {
+            return Err(ConfigError::NoCommands);
+        }
+        Ok(())
     }
 }
-impl<'a> serde::de::Visitor<'a> for StringVisitor {
-    type Value = String;
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(formatter, "a string.")
-    }
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Ok(v)
-    }
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Ok(v.to_owned())
-    }
-}
-

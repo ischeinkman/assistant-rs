@@ -2,6 +2,7 @@ mod buffer;
 mod config;
 mod error;
 mod metrics;
+mod speech;
 mod utils;
 
 use buffer::{SpeechLoader, WaitableBuffer};
@@ -14,6 +15,7 @@ use std::sync::Arc;
 fn main() {
     let raw = include_str!("../res/config.toml");
     let conf: Config = toml::from_str(raw).unwrap();
+    conf.verify().unwrap();
     let mut model = build_model(&conf).unwrap();
     let raw = model.get_sample_rate();
 
@@ -35,25 +37,18 @@ fn main() {
         )
         .unwrap();
     stream.play().unwrap();
-    
+
     let strm = model.create_stream().unwrap();
     let mut loader = SpeechLoader::new(strm, raw as u32);
     loop {
         let lock = buf.wait_until(raw as usize);
-        if loader.push(&lock).unwrap() {
-            let msg = loader.current_text();
-            println!(
-                "{}, {} => {}",
-                lock.len(),
-                (lock.len() * 1000) / (raw as usize),
-                msg
-            );
-        } else if loader.time_since_change() > std::time::Duration::from_millis(100)
+        loader.push(&lock).unwrap();
+        if loader.time_since_change() > std::time::Duration::from_millis(100)
             && !loader.current_text().is_empty()
         {
             println!("======== LOADER DEINIT ==============");
             let final_msg = loader.current_text().trim();
-            let phones: Vec<_> = config::conv(final_msg).collect();
+            let phones = speech::Utterance::parse_with_unknowns(final_msg);
             println!("-> Sample count: {}", loader.num_samples());
             println!("-> Final text: {}", final_msg);
             println!("-> Final phones: {:?}", phones);
@@ -76,25 +71,13 @@ fn main() {
 }
 
 fn build_model(conf: &Config) -> Result<Model, error::AssistantRsError> {
-    let lib = conf
-        .deepspeech_config
-        .library_path
-        .clone()
-        .unwrap_or_else(|| {
-            let mut p = std::path::PathBuf::new();
-            p.set_file_name("libdeepspeech.so");
-            p
-        });
-    let model = conf
-        .deepspeech_config
-        .model_path
-        .as_ref()
-        .ok_or(error::ConfigError::NoModel)?;
+    let lib = conf.deepspeech_config.library_path()?;
+    let model = conf.deepspeech_config.model_path()?;
     let mut retvl = Model::load_from_files(lib.as_ref(), model.as_ref())?;
-    if let Some(scorer) = conf.deepspeech_config.scorer_path.as_ref() {
+    if let Some(scorer) = conf.deepspeech_config.scorer_path()? {
         retvl.enable_external_scorer(scorer)?;
     }
-    if let Some(w) = conf.deepspeech_config.beam_width {
+    if let Some(w) = conf.deepspeech_config.beam_width()? {
         retvl.set_model_beam_width(w)?;
     }
     Ok(retvl)
