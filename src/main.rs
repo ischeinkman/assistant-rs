@@ -54,6 +54,7 @@ fn main() {
             println!("======== LOADER DEINIT ==============");
             let final_msg = loader.current_text().trim();
             let phones: Vec<_> = config::conv(final_msg).collect();
+            println!("-> Sample count: {}", loader.num_samples());
             println!("-> Final text: {}", final_msg);
             println!("-> Final phones: {:?}", phones);
             let (cmd, d) = conf

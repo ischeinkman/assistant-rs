@@ -1,5 +1,4 @@
-use std::sync::{Mutex, Condvar};
-
+use std::sync::{Condvar, Mutex};
 
 pub struct SpeechLoader {
     stream: deepspeech::dynamic::Stream,
@@ -29,21 +28,27 @@ impl SpeechLoader {
         std::time::Duration::from_nanos(nanos)
     }
     pub fn push(&mut self, data: &[i16]) -> Result<DidChange, deepspeech::errors::DeepspeechError> {
-        self.raw_data.extend_from_slice(data);
         self.stream.feed_audio(data);
         self.total_samples += data.len();
         let mut next_text = self.stream.intermediate_decode()?;
         if next_text != self.current_text {
             std::mem::swap(&mut self.current_text, &mut next_text);
             self.samples_since_change = 0;
+            self.raw_data.extend_from_slice(data);
             Ok(true)
         } else {
+            if next_text != "" {
+                self.raw_data.extend_from_slice(data);
+            }
             self.samples_since_change += data.len();
             Ok(false)
         }
     }
     pub fn current_text(&self) -> &str {
         &self.current_text
+    }
+    pub fn num_samples(&self) -> usize {
+        self.total_samples
     }
 }
 
