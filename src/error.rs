@@ -8,10 +8,7 @@ pub enum AssistantRsError {
     #[error("DeepSpeech library error")]
     Deepspeech(#[from] DeepspeechError),
 
-    #[error("error reading config file")]
-    ParseConfig(#[from] TomlError),
-
-    #[error("error in config")]
+    #[error("config error")]
     Config(#[from] ConfigError),
 }
 
@@ -23,6 +20,10 @@ pub enum ConfigError {
     NoCommands,
     #[error("cannot construct pronounciation for message")]
     UnprounounceableMessage(#[from] PhonemeConvertionError),
+    #[error("error parsing config file")]
+    Parsing(#[from] TomlError),
+    #[error("error reading config file")]
+    Io(#[from] std::io::Error),
 }
 
 #[derive(Error, Debug)]

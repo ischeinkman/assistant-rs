@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::io::{self, Read, Write};
+use std::fs::{File};
 
 use crate::error::ConfigError;
 use crate::utils::StringVisitor;
@@ -65,7 +68,7 @@ impl Command {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct DeepspeechConfig {
     pub library_path: Option<PathBuf>,
@@ -75,6 +78,21 @@ pub struct DeepspeechConfig {
 }
 
 impl DeepspeechConfig {
+    pub fn or_else(mut self, other: DeepspeechConfig) -> Self {
+        if self.library_path.is_none() {
+            self.library_path = other.library_path;
+        }
+        if self.model_path.is_none() {
+            self.model_path = other.model_path;
+        }
+        if self.scorer_path.is_none() {
+            self.scorer_path = other.scorer_path;
+        }
+        if self.beam_width.is_none() {
+            self.beam_width = other.beam_width;
+        }
+        self
+    }
     pub fn library_path(&self) -> Result<&Path, ConfigError> {
         if let Some(pt) = self.library_path.as_ref() {
             Ok(pt.as_ref())
@@ -111,7 +129,7 @@ impl DeepspeechConfig {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(flatten)]
     pub deepspeech_config: DeepspeechConfig,
@@ -119,11 +137,35 @@ pub struct Config {
 }
 
 impl Config {
+
+    pub fn read_file(path : impl AsRef<Path>) -> Result<Self, ConfigError> {
+        let mut fh = File::open(path)?;
+        let mut raw = String::new();
+        fh.read_to_string(&mut raw)?;
+        let res = toml::from_str(&raw)?;
+        Ok(res)
+    }
     pub fn verify(&self) -> Result<(), ConfigError> {
         self.deepspeech_config.verify()?;
         if self.commands.is_empty() {
             return Err(ConfigError::NoCommands);
         }
         Ok(())
+    }
+
+    pub fn or_else(mut self, other: Config) -> Self {
+        self.deepspeech_config = self.deepspeech_config.or_else(other.deepspeech_config);
+        let existing_messages = self
+            .commands
+            .iter()
+            .map(|c| &c.message.raw)
+            .collect::<HashSet<_>>();
+        let mut new_commands = other
+            .commands
+            .into_iter()
+            .filter(|cmd| !existing_messages.contains(&cmd.message.raw))
+            .collect::<Vec<_>>();
+        self.commands.append(&mut new_commands);
+        self
     }
 }
