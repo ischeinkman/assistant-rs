@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::error::ConfigError;
-use crate::utils::StringVisitor;
+use crate::utils::{IterUtils, StringUtils, StringVisitor};
 
 use crate::speech::Utterance;
 
@@ -167,4 +167,62 @@ impl Config {
         self.commands.append(&mut new_commands);
         self
     }
+}
+
+pub fn get_config_dirs() -> Result<Vec<PathBuf>, ConfigError> {
+    let mut retvl = Vec::new();
+    let mut args = std::env::args();
+    while let Some(nxt) = args.next() {
+        if nxt.trim().starts_with("--config=") {
+            let raw_path = nxt.trim_start_matches("--config=");
+            let path = PathBuf::from(raw_path);
+            retvl.push(path);
+        } else if nxt.trim().starts_with("--config") {
+            let raw_path = args.next().ok_or_else(|| ConfigError::NoFlagArgument)?;
+            let path = PathBuf::from(raw_path);
+            retvl.push(path);
+        }
+    }
+    let xdg_config_home = std::env::var_os("XDG_CONFIG_HOME")
+        .map(|s| PathBuf::from(s))
+        .or_else(|| {
+            let home = std::env::var_os("HOME")?;
+            let mut pt = PathBuf::from(home);
+            pt.push("/.config");
+            Some(pt)
+        });
+    let xdg_home_path = xdg_config_home.map(|pt| config_root_to_toml(pt));
+    if let Some(pt) = xdg_home_path {
+        if pt.is_file() {
+            retvl.push(pt);
+        }
+    }
+    let xdg_config_dirs_raw = match std::env::var("XDG_CONFIG_DIRS") {
+        Err(std::env::VarError::NotPresent) => std::iter::once("/etc/xdg".to_string()).right(),
+        Err(std::env::VarError::NotUnicode(_raw)) => {
+            todo!();
+        },
+        Ok(s) => s.split_owned(':').left(),
+    };
+    let xdg_config_dirs = xdg_config_dirs_raw.map(|s| PathBuf::from(s));
+    let xdg_sys_paths = xdg_config_dirs
+        .map(|pt| config_root_to_toml(pt))
+        .filter(|pt| pt.is_file());
+    retvl.extend(xdg_sys_paths);
+    Ok(retvl)
+}
+
+fn config_root_to_toml(mut pt: PathBuf) -> PathBuf {
+    pt.push("/assistant-rs");
+    pt.push("assistant.toml");
+    pt
+}
+
+pub fn cascade_configs(paths: &[impl AsRef<Path>]) -> Result<Config, ConfigError> {
+    let mut config = Config::default();
+    for pt in paths {
+        let pt_conf = Config::read_file(pt)?;
+        config = config.or_else(pt_conf);
+    }
+    Ok(config)
 }

@@ -78,3 +78,40 @@ impl StrUtils for str {
         split_at_first(&self, marker)
     }
 }
+
+
+pub trait StringUtils {
+    fn split_owned(self, marker : char) -> SplitOwned;
+}
+
+impl StringUtils for String {
+    fn split_owned(self, marker: char) -> SplitOwned {
+        SplitOwned {marker, buffer : self}
+    }
+}
+
+pub struct SplitOwned {
+    marker : char, 
+    buffer : String, 
+}
+
+impl Iterator for SplitOwned {
+    type Item = String;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.buffer.is_empty() {
+            return None;
+        }
+        let spl_idx = self.buffer.find(self.marker);
+        match spl_idx {
+            Some(idx) => {
+                let mut next_buff = self.buffer.split_off(idx + 1);
+                std::mem::swap(&mut self.buffer, &mut next_buff);
+                next_buff.pop();
+                Some(next_buff)
+            }
+            None => {
+                Some( std::mem::take(&mut self.buffer) )
+            }
+        }
+    }
+}

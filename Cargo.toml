@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["ilan"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0"
 deepspeech = {git = "https://github.com/RustAudio/deepspeech-rs", default-features=false, features = [ "dynamic"]}
@@ -16,5 +14,5 @@ arpabet = "1.0"
 crossbeam = "0.7"
 thiserror = "1.0"
 
-[profile.release]
-debug=true
+#[profile.release]
+#debug=true

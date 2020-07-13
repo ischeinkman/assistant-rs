@@ -23,16 +23,24 @@ pub enum AssistantRsError {
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
+
     #[error("no model path passed")]
     NoModel,
+
     #[error("no commands passed")]
     NoCommands,
+
     #[error("cannot construct pronounciation for message")]
     UnprounounceableMessage(#[from] PhonemeConvertionError),
+
     #[error("error parsing config file")]
     Parsing(#[from] TomlError),
+
     #[error("error reading config file")]
     Io(#[from] std::io::Error),
+
+    #[error("no path passed to --config flag")]
+    NoFlagArgument
 }
 
 #[derive(Error, Debug)]

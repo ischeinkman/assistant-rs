@@ -10,15 +10,13 @@ use config::{Command, Config};
 
 use cpal::traits::HostTrait;
 use deepspeech::dynamic::Model;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process;
 use std::time::Duration;
 
 fn main() {
-    let test_path = vec![PathBuf::from(
-        "/home/ilan/Projects/assistant-rs/res/config.toml",
-    )];
-    let mut ctx = AssistantContext::init_from_paths(test_path).unwrap();
+    let paths = config::get_config_dirs().unwrap();
+    let mut ctx = AssistantContext::init_from_paths(paths).unwrap();
     ctx.run().unwrap();
 }
 
@@ -41,18 +39,9 @@ pub struct AssistantContext {
     config_paths: Vec<PathBuf>,
 }
 
-fn cascade_configs(paths: &[impl AsRef<Path>]) -> Result<Config, error::ConfigError> {
-    let mut config = Config::default();
-    for pt in paths {
-        let pt_conf = Config::read_file(pt)?;
-        config = config.or_else(pt_conf);
-    }
-    Ok(config)
-}
-
 impl AssistantContext {
     pub fn init_from_paths(config_paths: Vec<PathBuf>) -> Result<Self, error::AssistantRsError> {
-        let config = cascade_configs(&config_paths)?;
+        let config = config::cascade_configs(&config_paths)?;
         config.verify()?;
         let model = build_model(&config)?;
         Ok(Self {
@@ -62,7 +51,7 @@ impl AssistantContext {
         })
     }
     pub fn reload(&mut self) -> Result<(), error::AssistantRsError> {
-        let new_conf = cascade_configs(&self.config_paths)?;
+        let new_conf = config::cascade_configs(&self.config_paths)?;
         if self.config != new_conf {
             let new_model = build_model(&new_conf)?;
             self.model = new_model;
