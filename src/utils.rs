@@ -1,6 +1,4 @@
-
-
-/// Utility struct to wrap multiple compatible iterators into one. 
+/// Utility struct to wrap multiple compatible iterators into one.
 pub enum EitherIter<Itm, A: Iterator<Item = Itm>, B: Iterator<Item = Itm>> {
     Left(A),
     Right(B),
@@ -31,10 +29,9 @@ pub trait IterUtils<Item>: Iterator<Item = Item> + Sized {
 
 impl<S, I> IterUtils<I> for S where S: Iterator<Item = I> {}
 
-
 /// Simple `serde::de::Visitor` impl that just returns a string that it is fed.
 /// Useful for deserialization requiring some extra preprocessing on init, like  
-/// for example generating the `PhonePart` list from the `raw` text in a `CommandMessage`. 
+/// for example generating the `PhonePart` list from the `raw` text in a `CommandMessage`.
 pub struct StringVisitor {}
 
 impl StringVisitor {
@@ -58,5 +55,26 @@ impl<'a> serde::de::Visitor<'a> for StringVisitor {
         E: serde::de::Error,
     {
         Ok(v.to_owned())
+    }
+}
+
+fn split_at_first<'a>(inp: &'a str, marker: char) -> (&'a str, &'a str) {
+    let mut sep_iter = inp.match_indices(marker);
+    if let Some((idx, _)) = sep_iter.next() {
+        let a = &inp[..idx];
+        let b = &inp[idx + 1..];
+        (a, b)
+    } else {
+        (inp, &"")
+    }
+}
+
+pub trait StrUtils {
+    fn split_at_first<'a>(&'a self, marker: char) -> (&'a str, &'a str);
+}
+
+impl StrUtils for str {
+    fn split_at_first<'a>(&'a self, marker: char) -> (&'a str, &'a str) {
+        split_at_first(&self, marker)
     }
 }

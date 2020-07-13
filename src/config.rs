@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::io::{self, Read, Write};
-use std::fs::{File};
 
 use crate::error::ConfigError;
 use crate::utils::StringVisitor;
@@ -137,8 +137,7 @@ pub struct Config {
 }
 
 impl Config {
-
-    pub fn read_file(path : impl AsRef<Path>) -> Result<Self, ConfigError> {
+    pub fn read_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let mut fh = File::open(path)?;
         let mut raw = String::new();
         fh.read_to_string(&mut raw)?;
