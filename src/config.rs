@@ -188,7 +188,7 @@ pub fn get_config_dirs() -> Result<Vec<PathBuf>, ConfigError> {
         .or_else(|| {
             let home = std::env::var_os("HOME")?;
             let mut pt = PathBuf::from(home);
-            pt.push("/.config");
+            pt.push(".config");
             Some(pt)
         });
     let xdg_home_path = xdg_config_home.map(|pt| config_root_to_toml(pt));
@@ -201,7 +201,7 @@ pub fn get_config_dirs() -> Result<Vec<PathBuf>, ConfigError> {
         Err(std::env::VarError::NotPresent) => std::iter::once("/etc/xdg".to_string()).right(),
         Err(std::env::VarError::NotUnicode(_raw)) => {
             todo!();
-        },
+        }
         Ok(s) => s.split_owned(":").left(),
     };
     let xdg_config_dirs = xdg_config_dirs_raw.map(|s| PathBuf::from(s));
@@ -213,7 +213,7 @@ pub fn get_config_dirs() -> Result<Vec<PathBuf>, ConfigError> {
 }
 
 fn config_root_to_toml(mut pt: PathBuf) -> PathBuf {
-    pt.push("/assistant-rs");
+    pt.push("assistant-rs");
     pt.push("assistant.toml");
     pt
 }
