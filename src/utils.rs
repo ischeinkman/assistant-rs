@@ -79,39 +79,55 @@ impl StrUtils for str {
     }
 }
 
-
 pub trait StringUtils {
-    fn split_owned(self, marker : char) -> SplitOwned;
+    fn split_owned<'a>(self, marker: &'a str) -> SplitOwned<'a>;
 }
 
 impl StringUtils for String {
-    fn split_owned(self, marker: char) -> SplitOwned {
-        SplitOwned {marker, buffer : self}
+    fn split_owned<'a>(self, marker: &'a str) -> SplitOwned<'a> {
+        SplitOwned {
+            marker,
+            buffer: self,
+            finished: false,
+        }
     }
 }
 
-pub struct SplitOwned {
-    marker : char, 
-    buffer : String, 
+pub struct SplitOwned<'a> {
+    marker: &'a str,
+    buffer: String,
+    finished: bool,
 }
 
-impl Iterator for SplitOwned {
+impl<'a> Iterator for SplitOwned<'a> {
     type Item = String;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.buffer.is_empty() {
+        if self.finished {
             return None;
         }
-        let spl_idx = self.buffer.find(self.marker);
-        match spl_idx {
-            Some(idx) => {
-                let mut next_buff = self.buffer.split_off(idx + 1);
-                std::mem::swap(&mut self.buffer, &mut next_buff);
-                next_buff.pop();
-                Some(next_buff)
-            }
-            None => {
-                Some( std::mem::take(&mut self.buffer) )
-            }
+        let end_idx = self
+            .buffer
+            .find(self.marker)
+            .map_or_else(|| self.buffer.len(), |idx| idx + self.marker.len());
+        let mut retbuf = self.buffer.split_off(end_idx);
+        std::mem::swap(&mut retbuf, &mut self.buffer);
+        if !retbuf.is_empty() {
+            retbuf.truncate(retbuf.len() - self.marker.len());
         }
+        if retbuf.is_empty() && self.buffer.is_empty() {
+            self.finished = true;
+        }
+        Some(retbuf)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_split_owned() {
+        let test_buffer = "abcdXabcdXXabcdXXXabcd".to_owned();
+        let spl = test_buffer.split_owned("abcd").collect::<Vec<_>>();
+        assert_eq!(spl, vec!["", "X", "XX", "XXX", ""]);
     }
 }

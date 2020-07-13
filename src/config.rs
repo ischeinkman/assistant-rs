@@ -202,7 +202,7 @@ pub fn get_config_dirs() -> Result<Vec<PathBuf>, ConfigError> {
         Err(std::env::VarError::NotUnicode(_raw)) => {
             todo!();
         },
-        Ok(s) => s.split_owned(':').left(),
+        Ok(s) => s.split_owned(":").left(),
     };
     let xdg_config_dirs = xdg_config_dirs_raw.map(|s| PathBuf::from(s));
     let xdg_sys_paths = xdg_config_dirs
