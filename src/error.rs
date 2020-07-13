@@ -10,6 +10,15 @@ pub enum AssistantRsError {
 
     #[error("config error")]
     Config(#[from] ConfigError),
+
+    #[error("no microphone found")]
+    MicrophoneNotFound,
+
+    #[error("CPAL error")]
+    Cpal(#[from] CpalError), 
+
+    #[error("Error running command")]
+    RunError (#[from] std::io::Error)
 }
 
 #[derive(Error, Debug)]
@@ -30,4 +39,16 @@ pub enum ConfigError {
 #[error("cannot convert {raw} to phoneme list")]
 pub struct PhonemeConvertionError {
     pub raw: String,
+}
+
+
+#[derive(Error, Debug)]
+pub enum CpalError {
+    #[error("error building stream")]
+    BuildStream(#[from] cpal::BuildStreamError), 
+    #[error("error playing stream")]
+    PlayStream(#[from] cpal::PlayStreamError),
+
+    #[error("error in running stream")]
+    Stream(#[from] cpal::StreamError)
 }
