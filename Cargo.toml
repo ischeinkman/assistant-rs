@@ -13,6 +13,7 @@ toml = "0.5"
 arpabet = "1.0"
 crossbeam = "0.7"
 thiserror = "1.0"
+structopt = "0.3"
 
 #[profile.release]
 #debug=true
