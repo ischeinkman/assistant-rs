@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::error::ConfigError;
-use crate::utils::{IterUtils, StringUtils, StringVisitor};
+use crate::utils::StringVisitor;
 
 use crate::speech::Utterance;
 
@@ -43,9 +43,6 @@ impl Command {
     }
     pub fn message(&self) -> &str {
         &self.message.raw
-    }
-    pub fn message_ap(&self) -> &Utterance {
-        &self.message.phones
     }
     fn serialize_message<S: serde::Serializer>(
         msg: &CommandMessage,
@@ -168,7 +165,6 @@ impl Config {
         self
     }
 }
-
 
 pub fn cascade_configs(paths: &[impl AsRef<Path>]) -> Result<Config, ConfigError> {
     let mut config = Config::default();

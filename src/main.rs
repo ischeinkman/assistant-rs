@@ -6,6 +6,7 @@ mod metrics;
 mod speech;
 mod utils;
 
+use nix::sys::signal::{SigSet, Signal};
 use structopt::StructOpt;
 
 use std::path::PathBuf;
@@ -13,13 +14,27 @@ use std::path::PathBuf;
 use crate::utils::{IterUtils, StringUtils};
 
 fn main() {
+    let mut waiter = SigSet::empty();
+    waiter.add(Signal::SIGUSR1);
+    waiter.add(Signal::SIGCONT);
+    waiter.add(Signal::SIGHUP);
     let args = Args::from_args();
     let arg_confs = args.configs.into_iter();
     let paths = arg_confs
         .chain(get_xdg_config_files().into_iter())
         .collect();
     let mut ctx = crate::context::AssistantContext::init_from_paths(paths).unwrap();
-    ctx.run().unwrap();
+    waiter.thread_set_mask().unwrap();
+    loop {
+        match waiter.wait() {
+            Ok(Signal::SIGHUP) => ctx.reload().unwrap(),
+            Ok(Signal::SIGCONT) | Ok(Signal::SIGUSR1) => ctx.run().unwrap(),
+            Ok(other) => panic!("INVALID SIGNAL: {:?}", other),
+            Err(e) => {
+                panic!("GOT WEIRD: {:?}", e);
+            }
+        }
+    }
 }
 
 #[derive(Debug, StructOpt)]
