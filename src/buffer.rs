@@ -54,17 +54,17 @@ impl SpeechLoader {
         }
     }
 
-    /// Gets the current transcript of the audio stored in this loader. 
+    /// Gets the current transcript of the audio stored in this loader.
     pub fn current_text(&self) -> &str {
         &self.current_text
     }
 
-    /// Gets the total number of samples that were `push`ed to this loader. 
+    /// Gets the total number of samples that were `push`ed to this loader.
     pub fn num_samples(&self) -> usize {
         self.total_samples
     }
 
-    /// "Finishes" the loader, returning the text transcription and raw audio data. 
+    /// "Finishes" the loader, returning the text transcription and raw audio data.
     pub fn finish(self) -> (String, Vec<i16>) {
         (self.current_text, self.raw_data)
     }
@@ -104,15 +104,22 @@ impl<T: Clone> WaitableBuffer<T> {
     /// On success, all data is taken out of the buffer and returned, even if there are more elements than `target`.
     /// On timeout, the method returns `Err(Timeout{})`.
     pub fn wait_until_timeout(&self, target: usize, timeout: Duration) -> Result<Vec<T>, Timeout> {
+        let start = std::time::Instant::now();
+        let end = start + timeout;
         let mut lock = self.data.lock().unwrap_or_else(|e| e.into_inner());
         loop {
             // Loop since Condvars can be woken up randomly.
             if lock.len() >= target {
                 break;
             }
+            let now = std::time::Instant::now();
+            if now > end {
+                return Err(Timeout {});
+            }
+            let time_left = end - now;
             let (l, tm) = self
                 .waiter
-                .wait_timeout(lock, timeout)
+                .wait_timeout(lock, time_left)
                 .unwrap_or_else(|e| e.into_inner());
             if tm.timed_out() {
                 return Err(Timeout {});
@@ -130,7 +137,7 @@ impl<T: Clone> WaitableBuffer<T> {
 #[error("Timed out.")]
 pub struct Timeout {}
 
-/// Manages recieving audio from the microphone. 
+/// Manages recieving audio from the microphone.
 pub struct AudioReciever {
     buffer: Arc<WaitableBuffer<i16>>,
     error_recv: crossbeam::Receiver<AssistantRsError>,
@@ -146,8 +153,7 @@ impl Drop for AudioReciever {
 }
 
 impl AudioReciever {
-
-    /// Builts a new `AudioReciever`, including building the internal buffers and starting the `cpal` input stream. 
+    /// Builts a new `AudioReciever`, including building the internal buffers and starting the `cpal` input stream.
     pub fn construct(
         device: &cpal::Device,
         config: &cpal::StreamConfig,
@@ -175,7 +181,7 @@ impl AudioReciever {
     }
 
     /// Waits until the current audio buffer reaches at least a certain length before returning that data.
-    /// The entire buffer is returned, not just the number of samples specified by `target`. 
+    /// The entire buffer is returned, not just the number of samples specified by `target`.
     pub fn wait_until(&self, target: usize) -> Result<Vec<i16>, AssistantRsError> {
         const POLL_LENGTH: Duration = Duration::from_millis(100);
         loop {
