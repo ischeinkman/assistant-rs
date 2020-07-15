@@ -38,6 +38,7 @@ impl Utterance {
             .collect::<Result<_, PhonemeConvertionError>>()?;
         Ok(Self { phones })
     }
+    #[allow(unused)]
     pub fn parse_with_unknowns(raw_msg: &str) -> Self {
         let phones = conv(raw_msg).collect();
         Self { phones }

@@ -3,7 +3,6 @@ use crate::config;
 use crate::config::{Command, Config};
 use crate::error::AssistantRsError;
 use crate::metrics;
-use crate::speech::Utterance;
 
 use cpal::traits::HostTrait;
 use deepspeech::dynamic::Model;
@@ -79,10 +78,8 @@ impl AssistantContext {
         let final_samples = loader.num_samples();
         let (final_msg, _) = loader.finish();
         let final_msg = final_msg.trim();
-        let phones = Utterance::parse_with_unknowns(final_msg);
         println!("-> Sample count: {}", final_samples);
         println!("-> Final text: {}", final_msg);
-        println!("-> Final phones: {:?}", phones);
         let (cmd, d) = self
             .config
             .commands
