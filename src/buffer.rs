@@ -3,6 +3,7 @@ use cpal::traits::{DeviceTrait, StreamTrait};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+/// A buffer used to store speech data and monitor the beginning and end of speech.
 pub struct SpeechLoader {
     stream: deepspeech::dynamic::Stream,
     sample_rate: u32,
@@ -26,12 +27,14 @@ impl SpeechLoader {
         }
     }
 
+    /// The time since the loader detected new speech.
     pub fn time_since_change(&self) -> Duration {
         let nanos =
             ((1_000_000_000u64) * (self.samples_since_change as u64)) / (self.sample_rate as u64);
         Duration::from_nanos(nanos)
     }
 
+    /// Pushes new audio sample data to the model; returns whether or not the samples contained new speech information on success.
     pub fn push(&mut self, data: &[i16]) -> Result<DidChange, deepspeech::errors::DeepspeechError> {
         self.stream.feed_audio(data);
         self.total_samples += data.len();
@@ -42,6 +45,7 @@ impl SpeechLoader {
             self.raw_data.extend_from_slice(data);
             Ok(true)
         } else {
+            // only push relevant data to our buffer
             if next_text != "" {
                 self.raw_data.extend_from_slice(data);
             }
@@ -50,25 +54,36 @@ impl SpeechLoader {
         }
     }
 
+    /// Gets the current transcript of the audio stored in this loader. 
     pub fn current_text(&self) -> &str {
         &self.current_text
     }
 
+    /// Gets the total number of samples that were `push`ed to this loader. 
     pub fn num_samples(&self) -> usize {
         self.total_samples
     }
 
+    /// "Finishes" the loader, returning the text transcription and raw audio data. 
     pub fn finish(self) -> (String, Vec<i16>) {
         (self.current_text, self.raw_data)
     }
 }
 
+/// A buffer to pass data blocks of variable length between threads.
 pub struct WaitableBuffer<T: Clone> {
     data: Mutex<Vec<T>>,
     waiter: Condvar,
 }
 
+impl<T: Clone> Default for WaitableBuffer<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Clone> WaitableBuffer<T> {
+    /// Constructs a new `WaitableBuffer`.
     pub fn new() -> Self {
         Self {
             data: Mutex::new(Vec::new()),
@@ -76,15 +91,22 @@ impl<T: Clone> WaitableBuffer<T> {
         }
     }
 
+    /// Pushes data into the buffer synchronously.
     pub fn push_slice(&self, data: &[T]) {
         let mut lock = self.data.lock().unwrap_or_else(|e| e.into_inner());
         lock.extend_from_slice(data);
         self.waiter.notify_all();
     }
 
+    /// Blockes the thread until either the buffer reaches at least a length of `target` or the duration specified
+    /// by `timeout` passes.
+    ///
+    /// On success, all data is taken out of the buffer and returned, even if there are more elements than `target`.
+    /// On timeout, the method returns `Err(Timeout{})`.
     pub fn wait_until_timeout(&self, target: usize, timeout: Duration) -> Result<Vec<T>, Timeout> {
         let mut lock = self.data.lock().unwrap_or_else(|e| e.into_inner());
         loop {
+            // Loop since Condvars can be woken up randomly.
             if lock.len() >= target {
                 break;
             }
@@ -103,8 +125,12 @@ impl<T: Clone> WaitableBuffer<T> {
     }
 }
 
+/// The error returned when `WaitableBuffer::wait_until_timeout` times out.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, thiserror::Error)]
+#[error("Timed out.")]
 pub struct Timeout {}
 
+/// Manages recieving audio from the microphone. 
 pub struct AudioReciever {
     buffer: Arc<WaitableBuffer<i16>>,
     error_recv: crossbeam::Receiver<AssistantRsError>,
@@ -120,6 +146,8 @@ impl Drop for AudioReciever {
 }
 
 impl AudioReciever {
+
+    /// Builts a new `AudioReciever`, including building the internal buffers and starting the `cpal` input stream. 
     pub fn construct(
         device: &cpal::Device,
         config: &cpal::StreamConfig,
@@ -145,6 +173,9 @@ impl AudioReciever {
         };
         Ok(retvl)
     }
+
+    /// Waits until the current audio buffer reaches at least a certain length before returning that data.
+    /// The entire buffer is returned, not just the number of samples specified by `target`. 
     pub fn wait_until(&self, target: usize) -> Result<Vec<i16>, AssistantRsError> {
         const POLL_LENGTH: Duration = Duration::from_millis(100);
         loop {
