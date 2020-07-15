@@ -1,6 +1,6 @@
 use crate::buffer::{AudioReciever, SpeechLoader};
 use crate::config;
-use crate::config::{Command, Config};
+use crate::config::{Command, Config, DeepspeechConfig};
 use crate::error::AssistantRsError;
 use crate::metrics;
 
@@ -21,7 +21,7 @@ impl AssistantContext {
     pub fn init_from_paths(config_paths: Vec<PathBuf>) -> Result<Self, AssistantRsError> {
         let config = config::cascade_configs(&config_paths)?;
         config.verify()?;
-        let model = build_model(&config)?;
+        let model = build_model(&config.deepspeech_config)?;
         Ok(Self {
             model,
             config,
@@ -31,8 +31,10 @@ impl AssistantContext {
     pub fn reload(&mut self) -> Result<(), AssistantRsError> {
         let new_conf = config::cascade_configs(&self.config_paths)?;
         if self.config != new_conf {
-            let new_model = build_model(&new_conf)?;
-            self.model = new_model;
+            if self.config.deepspeech_config != new_conf.deepspeech_config {
+                let new_model = build_model(&new_conf.deepspeech_config)?;
+                self.model = new_model;
+            }
             self.config = new_conf;
         }
         Ok(())
@@ -116,14 +118,14 @@ impl AssistantContext {
     }
 }
 
-fn build_model(conf: &Config) -> Result<Model, AssistantRsError> {
-    let lib = conf.deepspeech_config.library_path()?;
-    let model = conf.deepspeech_config.model_path()?;
+fn build_model(conf: &DeepspeechConfig) -> Result<Model, AssistantRsError> {
+    let lib = conf.library_path()?;
+    let model = conf.model_path()?;
     let mut retvl = Model::load_from_files(lib.as_ref(), model.as_ref())?;
-    if let Some(scorer) = conf.deepspeech_config.scorer_path()? {
+    if let Some(scorer) = conf.scorer_path()? {
         retvl.enable_external_scorer(scorer)?;
     }
-    if let Some(w) = conf.deepspeech_config.beam_width()? {
+    if let Some(w) = conf.beam_width()? {
         retvl.set_model_beam_width(w)?;
     }
     Ok(retvl)
