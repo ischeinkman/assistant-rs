@@ -22,16 +22,20 @@ fn main() {
         TerminalMode::Stdout,
     )
     .unwrap();
-    let mut waiter = SigSet::empty();
-    waiter.add(Signal::SIGUSR1);
-    waiter.add(Signal::SIGCONT);
-    waiter.add(Signal::SIGHUP);
     let args = Args::from_args();
+    let mut waiter = SigSet::empty();
     let arg_confs = args.configs.into_iter();
     let paths = arg_confs
         .chain(get_xdg_config_files().into_iter())
         .collect();
     let mut ctx = crate::context::AssistantContext::init_from_paths(paths).unwrap();
+    if !args.daemonize {
+        ctx.run().unwrap();
+        return;
+    }
+    waiter.add(Signal::SIGUSR1);
+    waiter.add(Signal::SIGCONT);
+    waiter.add(Signal::SIGHUP);
     waiter.thread_set_mask().unwrap();
     loop {
         match waiter.wait() {
@@ -63,6 +67,15 @@ pub struct Args {
     /// Extra config files to read from.
     #[structopt(name = "config", long = "config")]
     configs: Vec<PathBuf>,
+
+    /// When this flag is passed, the program sleeps continuously in the background and
+    /// can be controlled via the following Unix signals:
+    ///
+    /// * SIGCONT | SIGUSR1 -- listen and run a single command.
+    ///
+    /// * SIGHUP -- reload the assistant's configuration from the config files.
+    #[structopt(name = "daemonize", long = "daemonize", short = "d")]
+    daemonize: bool,
 }
 
 pub fn get_xdg_config_files() -> Vec<PathBuf> {
@@ -96,7 +109,7 @@ fn xdg_home_config_dir() -> Option<PathBuf> {
 
 fn xdg_sys_config_dirs() -> impl Iterator<Item = PathBuf> {
     let xdg_config_dirs_raw = match std::env::var("XDG_CONFIG_DIRS") {
-        Err(std::env::VarError::NotPresent) => std::iter::once("/etc/xdg".to_string()).right(),
+        Err(std::env::VarError::NotPresent) => std::iter::once("/etc/xdg/".to_string()).right(),
         Err(std::env::VarError::NotUnicode(_raw)) => {
             todo!();
         }
