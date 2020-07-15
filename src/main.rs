@@ -13,7 +13,15 @@ use std::path::PathBuf;
 
 use crate::utils::{IterUtils, StringUtils};
 
+use simplelog::{LevelFilter, TermLogger, TerminalMode};
+
 fn main() {
+    TermLogger::init(
+        LevelFilter::Debug,
+        simplelog::ConfigBuilder::new().build(),
+        TerminalMode::Stdout,
+    )
+    .unwrap();
     let mut waiter = SigSet::empty();
     waiter.add(Signal::SIGUSR1);
     waiter.add(Signal::SIGCONT);
@@ -27,8 +35,17 @@ fn main() {
     waiter.thread_set_mask().unwrap();
     loop {
         match waiter.wait() {
-            Ok(Signal::SIGHUP) => ctx.reload().unwrap(),
-            Ok(Signal::SIGCONT) | Ok(Signal::SIGUSR1) => ctx.run().unwrap(),
+            Ok(Signal::SIGHUP) => {
+                log::log!(
+                    log::Level::Debug,
+                    "Caught a signal to reload the assistant."
+                );
+                ctx.reload().unwrap();
+            }
+            Ok(Signal::SIGCONT) | Ok(Signal::SIGUSR1) => {
+                log::log!(log::Level::Debug, "Caught a signal to run the assistant.");
+                ctx.run().unwrap();
+            }
             Ok(other) => panic!("INVALID SIGNAL: {:?}", other),
             Err(e) => {
                 panic!("GOT WEIRD: {:?}", e);

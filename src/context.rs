@@ -61,11 +61,17 @@ impl AssistantContext {
         Ok(())
     }
     pub fn run(&mut self) -> Result<(), AssistantRsError> {
+        log::log!(log::Level::Debug, "Starting new run.");
         let sample_rate = self.model.get_sample_rate();
         let audio_recv = self.build_audio_stream()?;
         let strm = self.model.create_stream()?;
         let mut loader = SpeechLoader::new(strm, sample_rate as u32);
         loop {
+            log::log!(
+                log::Level::Debug,
+                "Current speech text: {}",
+                loader.current_text()
+            );
             if loader.time_since_change() > Duration::from_millis(100)
                 && !loader.current_text().is_empty()
             {
@@ -74,24 +80,37 @@ impl AssistantContext {
             let l = audio_recv.wait_until(sample_rate as usize)?;
             loader.push(&l)?;
         }
-        println!("======== LOADER DEINIT ==============");
         let final_samples = loader.num_samples();
         let (final_msg, _) = loader.finish();
         let final_msg = final_msg.trim();
-        println!("-> Sample count: {}", final_samples);
-        println!("-> Final text: {}", final_msg);
+        log::log!(
+            log::Level::Debug,
+            "Finished at {} samples. Message: {}",
+            final_samples,
+            final_msg
+        );
         let (cmd, d) = self
             .config
             .commands
             .iter()
             .map(|cmd| {
                 let dl = metrics::leven_dist(cmd.message(), final_msg);
-                println!("= = > CMD {}: {}", cmd.message(), dl);
+                log::log!(
+                    log::Level::Debug,
+                    "    Command match score: {} => {}",
+                    cmd.message(),
+                    dl
+                );
                 (cmd, dl)
             })
             .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap())
             .unwrap();
-        println!("= > Choice: {}, distance {}", cmd.message(), d);
+        log::log!(
+            log::Level::Debug,
+            "Matched command {} with distance {}.",
+            cmd.message(),
+            d
+        );
         self.run_command(cmd)?;
         Ok(())
     }
