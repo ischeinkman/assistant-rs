@@ -31,6 +31,7 @@ impl AssistantContext {
     pub fn reload(&mut self) -> Result<(), AssistantRsError> {
         let new_conf = config::cascade_configs(&self.config_paths)?;
         if self.config != new_conf {
+            // Only reload the model if we need to
             if self.config.deepspeech_config != new_conf.deepspeech_config {
                 let new_model = build_model(&new_conf.deepspeech_config)?;
                 self.model = new_model;
@@ -41,6 +42,8 @@ impl AssistantContext {
     }
     fn build_audio_stream(&mut self) -> Result<AudioReciever, AssistantRsError> {
         let sample_rate = self.model.get_sample_rate();
+
+        //TODO: Allow input configuration.
         let host = cpal::default_host();
         let dev = host
             .default_input_device()
@@ -64,24 +67,31 @@ impl AssistantContext {
     }
     pub fn run(&mut self) -> Result<(), AssistantRsError> {
         log::log!(log::Level::Debug, "Starting new run.");
+
+        // Construct the speech loader and audio reciever.
         let sample_rate = self.model.get_sample_rate();
+        let mut loader = SpeechLoader::new(self.model.create_stream()?, sample_rate as u32);
         let audio_recv = self.build_audio_stream()?;
-        let strm = self.model.create_stream()?;
-        let mut loader = SpeechLoader::new(strm, sample_rate as u32);
+
+        // Listen for the command until the command is over.
         loop {
             log::log!(
                 log::Level::Debug,
                 "Current speech text: {}",
                 loader.current_text()
             );
-            if loader.time_since_change() > Duration::from_millis(100)
-                && !loader.current_text().is_empty()
-            {
+            let has_started = !loader.current_text().is_empty();
+            let has_finished =
+                has_started && loader.time_since_change() > Duration::from_millis(100);
+
+            if has_finished {
                 break;
             }
             let l = audio_recv.wait_until(sample_rate as usize)?;
             loader.push(&l)?;
         }
+
+        // Get the raw transcription of the audio.
         let final_samples = loader.num_samples();
         let (final_msg, _) = loader.finish();
         let final_msg = final_msg.trim();
@@ -91,6 +101,8 @@ impl AssistantContext {
             final_samples,
             final_msg
         );
+
+        // Match the command, currently via minimum edit distance.
         let (cmd, d) = self
             .config
             .commands
@@ -113,6 +125,8 @@ impl AssistantContext {
             cmd.message(),
             d
         );
+
+        // Run the matched command.
         self.run_command(cmd)?;
         Ok(())
     }

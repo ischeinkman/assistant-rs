@@ -112,10 +112,13 @@ impl<T: Clone> WaitableBuffer<T> {
             if lock.len() >= target {
                 break;
             }
+            // Check if we timed out yet.
             let now = std::time::Instant::now();
             if now > end {
                 return Err(Timeout {});
             }
+
+            // Math how much time is left
             let time_left = end - now;
             let (l, tm) = self
                 .waiter
@@ -165,9 +168,7 @@ impl AudioReciever {
         let stream = device
             .build_input_stream(
                 &config,
-                move |dt: &[i16], _cb| {
-                    handle.push_slice(dt);
-                },
+                move |dt: &[i16], _cb| handle.push_slice(dt),
                 move |e| error_send.send(CpalError::from(e).into()).unwrap(),
             )
             .map_err(|e| CpalError::from(e))?;

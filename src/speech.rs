@@ -2,6 +2,10 @@ use crate::error::PhonemeConvertionError;
 use crate::utils::IterUtils;
 use arpabet::{phoneme::Phoneme, Arpabet};
 
+
+/// Attempt to convert a string into its pronounciation. 
+///
+/// Currently this can only be done on strings composed of words in the CMUdict database.
 fn conv<'a>(raw_msg: &'a str) -> impl Iterator<Item = PhonePart> + 'a {
     let ap = Arpabet::load_cmudict();
     raw_msg
@@ -16,10 +20,18 @@ fn conv<'a>(raw_msg: &'a str) -> impl Iterator<Item = PhonePart> + 'a {
         .skip(1)
 }
 
+
+/// A pronounciation unit in an audio transcript.
 #[derive(PartialEq, Debug, Clone)]
 pub enum PhonePart {
+
+    /// An ARPABET Phoneme, including both consonants and vowels.
     Phoneme(Phoneme),
+
+    /// A divider between words in a transcript.
     Space,
+
+    /// A words whose pronounciation cannot (yet) be found.
     Unknown(String),
 }
 
@@ -29,6 +41,9 @@ pub struct Utterance {
 }
 
 impl Utterance {
+
+    /// Attemts to parse a string into its pronounciation, erroring if `raw_msg` contains a word
+    /// whose pronounciation cannot be found.
     pub fn parse(raw_msg: &str) -> Result<Self, PhonemeConvertionError> {
         let phones = conv(raw_msg)
             .map(|p| match p {
@@ -38,6 +53,9 @@ impl Utterance {
             .collect::<Result<_, PhonemeConvertionError>>()?;
         Ok(Self { phones })
     }
+    
+    /// Attemts to parse a string into its pronounciation, returning a `PhonePart::Unknown` for words
+    /// whose pronounciation cannot yet be found.
     #[allow(unused)]
     pub fn parse_with_unknowns(raw_msg: &str) -> Self {
         let phones = conv(raw_msg).collect();
