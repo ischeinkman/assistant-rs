@@ -2,14 +2,21 @@ library-path="/home/ilan/Programs/native_client_deepspeech/libdeepspeech.so"
 model-path = "/home/ilan/Programs/native_client_deepspeech/deepspeech-0.7.4-models.pbmm"
 #scorer-path = "/home/ilan/Downloads/deepspeech-0.7.4-models.scorer"
 
-[[commands]]
-message = "tee tee"
-command = "firefox https://tenno.tools/ns"
+[[command]]
+message = "firefox"
+mode = "firefox"
 
-[[commands]]
-message = "why tee"
+[[command]]
+message = "h top"
+command = "alacritty -c htop"
+
+[[mode]]
+name = "firefox"
+
+[[mode.command]]
+message = "youtube"
 command = "firefox youtube.com"
 
-[[commands]]
-message = "fire fox"
-command = "firefox"
+[[mode.command]]
+message = "tee tee"
+command = "firefox https://tenno.tools/ns"

@@ -55,7 +55,11 @@ impl AssistantContext {
         AudioReciever::construct(&dev, &stream_conf)
     }
     fn run_command(&self, cmd: &Command) -> Result<(), AssistantRsError> {
-        let raw_command = cmd.command();
+        let raw_command = if let Some(c) = cmd.command() {
+            c
+        } else {
+            panic!("TODO");
+        };
         process::Command::new("sh")
             .arg("-c")
             .arg(raw_command)

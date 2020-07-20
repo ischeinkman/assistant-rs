@@ -38,13 +38,21 @@ pub struct Command {
         deserialize_with = "Command::deserialize_message"
     )]
     message: CommandMessage,
-    command: String,
+    #[serde(default)]
+    command: Option<String>,
+    #[serde(rename = "mode", default)]
+    next_mode: Option<String>,
 }
 
 impl Command {
     /// Returns the terminal command that will be run if the keyphrase is matched.
-    pub fn command(&self) -> &str {
-        &self.command
+    pub fn command(&self) -> Option<&str> {
+        self.command.as_ref().map(|s| s.as_ref())
+    }
+
+    /// Returns the next mode that the model will switch to after this command is run, if it exists.
+    pub fn next_mode(&self) -> Option<&str> {
+        self.next_mode.as_ref().map(|s| s.as_ref())
     }
 
     /// Returns the keyphrase used to run this command.
@@ -122,7 +130,7 @@ impl DeepspeechConfig {
         }
     }
 
-    /// Returns the `scorer_path` to use if it has been set, else `None`. 
+    /// Returns the `scorer_path` to use if it has been set, else `None`.
     pub fn scorer_path(&self) -> Result<Option<&Path>, ConfigError> {
         if let Some(pt) = self.scorer_path.as_ref() {
             Ok(Some(pt.as_ref()))
@@ -131,7 +139,7 @@ impl DeepspeechConfig {
         }
     }
 
-    /// Returns the `beam_width` to use if it has been set, else `None`. 
+    /// Returns the `beam_width` to use if it has been set, else `None`.
     pub fn beam_width(&self) -> Result<Option<u16>, ConfigError> {
         if let Some(bw) = self.beam_width {
             Ok(Some(bw))
@@ -149,16 +157,21 @@ impl DeepspeechConfig {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(flatten)]
     pub deepspeech_config: DeepspeechConfig,
+
+    #[serde(rename = "command")]
     pub commands: Vec<Command>,
+
+    #[serde(rename = "mode")]
+    #[serde(default)]
+    pub modes: Vec<CommandMode>,
 }
 
 impl Config {
-
-    /// Reads configuration information from a file. 
+    /// Reads configuration information from a file.
     pub fn read_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let mut fh = File::open(path)?;
         let mut raw = String::new();
@@ -211,4 +224,27 @@ pub fn cascade_configs(paths: &[impl AsRef<Path>]) -> Result<Config, ConfigError
         config = config.or_else(pt_conf);
     }
     Ok(config)
+}
+
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Clone, Default)]
+pub struct CommandMode {
+    name: String,
+    #[serde(default)]
+    #[serde(rename = "command")]
+    commands: Vec<Command>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn testa() {
+        let raw = include_str!("../res/config.toml");
+        let cnf: Config = toml::from_str(raw).unwrap();
+
+        println!("{:?}", cnf.deepspeech_config);
+        println!("{:?}", cnf.commands);
+        println!("{:?}", cnf.modes);
+    }
 }
