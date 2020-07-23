@@ -1,84 +1,11 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::error::ConfigError;
-use crate::utils::StringVisitor;
-
-use crate::speech::Utterance;
-
-/// The keyphrase used to run a command.
-#[derive(Debug, Clone)]
-struct CommandMessage {
-    raw: String,
-    phones: Utterance,
-}
-
-impl PartialEq for CommandMessage {
-    fn eq(&self, other: &CommandMessage) -> bool {
-        self.raw == other.raw
-    }
-}
-
-impl Eq for CommandMessage {}
-
-impl std::hash::Hash for CommandMessage {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.raw.hash(state)
-    }
-}
-
-/// A single keyphrase-activated action to run.
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct Command {
-    #[serde(
-        serialize_with = "Command::serialize_message",
-        deserialize_with = "Command::deserialize_message"
-    )]
-    message: CommandMessage,
-    #[serde(default)]
-    command: Option<String>,
-    #[serde(rename = "mode", default)]
-    next_mode: Option<String>,
-}
-
-impl Command {
-    /// Returns the terminal command that will be run if the keyphrase is matched.
-    pub fn command(&self) -> Option<&str> {
-        self.command.as_ref().map(|s| s.as_ref())
-    }
-
-    /// Returns the next mode that the model will switch to after this command is run, if it exists.
-    pub fn next_mode(&self) -> Option<&str> {
-        self.next_mode.as_ref().map(|s| s.as_ref())
-    }
-
-    /// Returns the keyphrase used to run this command.
-    pub fn message(&self) -> &str {
-        &self.message.raw
-    }
-    fn serialize_message<S: serde::Serializer>(
-        msg: &CommandMessage,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&msg.raw)
-    }
-
-    fn deserialize_message<'de, S: serde::Deserializer<'de>>(
-        deserializer: S,
-    ) -> Result<CommandMessage, S::Error> {
-        let raw = deserializer.deserialize_string(StringVisitor::new())?;
-        let phones = Utterance::parse(&raw).map_err(|e| {
-            serde::de::Error::invalid_value(
-                serde::de::Unexpected::Str(&e.raw),
-                &"a message convertable to a list of phonemes",
-            )
-        })?;
-        Ok(CommandMessage { raw, phones })
-    }
-}
+use crate::modes::Command;
+use crate::modes::ModeTree;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -162,12 +89,8 @@ pub struct Config {
     #[serde(flatten)]
     pub deepspeech_config: DeepspeechConfig,
 
-    #[serde(rename = "command")]
-    pub commands: Vec<Command>,
-
-    #[serde(rename = "mode")]
-    #[serde(default)]
-    pub modes: Vec<CommandMode>,
+    #[serde(flatten)]
+    modes: ModeTree,
 }
 
 impl Config {
@@ -183,9 +106,7 @@ impl Config {
     /// Verifies that the config is complete and valid.
     pub fn verify(&self) -> Result<(), ConfigError> {
         self.deepspeech_config.verify()?;
-        if self.commands.is_empty() {
-            return Err(ConfigError::NoCommands);
-        }
+        self.modes.verify()?;
         Ok(())
     }
 
@@ -193,20 +114,14 @@ impl Config {
     ///
     /// If a field is defined in both `self` and `other`, the value in `self` is used.
     /// If two commands share the same message, the one in `self` is used.
-    pub fn or_else(mut self, other: Config) -> Self {
+    pub fn or_else(mut self, other: Config) -> Result<Self, ConfigError> {
         self.deepspeech_config = self.deepspeech_config.or_else(other.deepspeech_config);
-        let existing_messages = self
-            .commands
-            .iter()
-            .map(|c| &c.message.raw)
-            .collect::<HashSet<_>>();
-        let mut new_commands = other
-            .commands
-            .into_iter()
-            .filter(|cmd| !existing_messages.contains(&cmd.message.raw))
-            .collect::<Vec<_>>();
-        self.commands.append(&mut new_commands);
-        self
+        self.modes = self.modes.or_else(other.modes)?;
+        Ok(self)
+    }
+
+    pub fn commands_for_mode(&self, mode: Option<impl AsRef<str>>) -> Option<&[Command]> {
+        self.modes.commands_for_mode(mode)
     }
 }
 
@@ -221,17 +136,9 @@ pub fn cascade_configs(paths: &[impl AsRef<Path>]) -> Result<Config, ConfigError
             continue;
         }
         let pt_conf = Config::read_file(pt)?;
-        config = config.or_else(pt_conf);
+        config = config.or_else(pt_conf)?;
     }
     Ok(config)
-}
-
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Hash, Clone, Default)]
-pub struct CommandMode {
-    name: String,
-    #[serde(default)]
-    #[serde(rename = "command")]
-    commands: Vec<Command>,
 }
 
 #[cfg(test)]
@@ -241,10 +148,6 @@ mod tests {
     #[test]
     fn testa() {
         let raw = include_str!("../res/config.toml");
-        let cnf: Config = toml::from_str(raw).unwrap();
-
-        println!("{:?}", cnf.deepspeech_config);
-        println!("{:?}", cnf.commands);
-        println!("{:?}", cnf.modes);
+        let _cnf: Config = toml::from_str(raw).unwrap();
     }
 }

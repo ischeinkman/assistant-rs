@@ -5,6 +5,7 @@ mod error;
 mod metrics;
 mod speech;
 mod utils;
+mod modes;
 
 use nix::sys::signal::{SigSet, Signal};
 use structopt::StructOpt;

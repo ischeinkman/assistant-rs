@@ -37,6 +37,18 @@ pub enum ConfigError {
 
     #[error("error reading config file")]
     Io(#[from] std::io::Error),
+
+    #[error("mode {0} is referenced but does not exist")]
+    ModeNotFound(String), 
+
+    #[error("mode {0} is empty")]
+    EmptyMode(String), 
+
+    #[error("mode {0} was defined multiple times")]
+    DuplicateMode(String), 
+    
+    #[error("message {0} was defined multiple times")]
+    DuplicateMessage(String), 
 }
 
 #[derive(Error, Debug)]
