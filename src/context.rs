@@ -1,9 +1,9 @@
 use crate::buffer::{AudioReciever, SpeechLoader};
 use crate::config;
 use crate::config::{Config, DeepspeechConfig};
-use crate::modes::Command;
 use crate::error::AssistantRsError;
 use crate::metrics;
+use crate::modes::Command;
 
 use cpal::traits::HostTrait;
 use deepspeech::dynamic::Model;
@@ -72,7 +72,7 @@ fn run_single(
     log::log!(log::Level::Debug, "Finished message: {}", final_msg);
 
     // Match the command, currently via minimum edit distance.
-    let (commands, next_mode) = match_commands(config, current_mode, final_msg);
+    let (commands, next_mode) = match_commands(&config.modes, current_mode, final_msg);
 
     // Run the matched commands.
     for cmd in commands.into_iter() {
@@ -98,7 +98,7 @@ fn build_model(conf: &DeepspeechConfig) -> Result<Model, AssistantRsError> {
 
 /// Attempts to match a raw speech string to a "path" in the mode config graph
 fn match_commands<'a>(
-    conf: &'a impl CommandModeStore,
+    conf: &'a crate::modes::ModeTree,
     current_mode: Option<&str>,
     raw_text: &str,
 ) -> (Vec<&'a str>, Option<String>) {
@@ -108,15 +108,11 @@ fn match_commands<'a>(
     loop {
         println!("Current buff : {:?}", str_buff);
         // Get all the edges from this node
-        let current_commands = conf
-            .commands_for_mode((&mode).as_ref())
-            .into_iter()
-            .flatten();
+        let current_commands = conf.commands_for_mode(mode);
 
         // Tries to match the next edge from the current
         let mut matched_cmd: Option<&Command> = None;
         for cur in current_commands {
-
             // The initial match is whether or not the previous buffer compounded with the current node is
             // better than just the buffer; as such, the buffer is padded with spaces to accurately measure the distance.
             let equivalent_matched_msg = match matched_cmd {
@@ -207,35 +203,13 @@ fn run_command(cmd: &str) -> Result<(), AssistantRsError> {
     Ok(())
 }
 
-trait CommandModeStore {
-    fn commands_for_mode(&self, mode: Option<impl AsRef<str>>) -> Option<&[Command]>;
-}
-
-impl CommandModeStore for Config {
-    fn commands_for_mode(&self, mode: Option<impl AsRef<str>>) -> Option<&[Command]> {
-        Config::commands_for_mode(self, mode)
-    }
-}
-
-impl CommandModeStore for (Vec<Command>, Vec<(String, Vec<Command>)>) {
-    fn commands_for_mode(&self, mode: Option<impl AsRef<str>>) -> Option<&[Command]> {
-        match mode {
-            Some(m) => self
-                .1
-                .iter()
-                .find(|(cur, _)| cur == m.as_ref())
-                .map(|(_, r)| r.as_ref()),
-            None => Some(self.0.as_ref()),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modes::{Command, CommandMessage};
+    use crate::modes::{Command, CommandMessage, ModeTree};
     #[test]
     fn test_command_match() {
+        let tree = ModeTree::empty();
         let root = vec![
             Command::new(
                 CommandMessage::from_raw("fire fox".to_owned()).unwrap(),
@@ -248,6 +222,7 @@ mod tests {
                 None,
             ),
         ];
+        let tree = tree.with_commands(root).unwrap();
         let firefox = vec![
             Command::new(
                 CommandMessage::from_raw("you tube".to_owned()).unwrap(),
@@ -265,6 +240,7 @@ mod tests {
                 None,
             ),
         ];
+        let tree = tree.with_mode("firefox".to_owned(), firefox).unwrap();
         let youtube = vec![
             Command::new(
                 CommandMessage::from_raw("f one".to_owned()).unwrap(),
@@ -278,13 +254,7 @@ mod tests {
             ),
         ];
 
-        let tree = (
-            root,
-            vec![
-                ("firefox".to_owned(), firefox),
-                ("youtube".to_owned(), youtube),
-            ],
-        );
+        let tree = tree.with_mode("youtube".to_owned(), youtube).unwrap();
         let (to_run, next_mode) = match_commands(&tree, None, "firefox youtube");
         assert_eq!(to_run, Vec::<String>::new());
         assert_eq!(next_mode.as_ref().map(|s| s.as_ref()), Some("youtube"));

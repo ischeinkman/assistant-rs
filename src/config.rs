@@ -4,7 +4,6 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::error::ConfigError;
-use crate::modes::Command;
 use crate::modes::ModeTree;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, Default)]
@@ -90,7 +89,7 @@ pub struct Config {
     pub deepspeech_config: DeepspeechConfig,
 
     #[serde(flatten)]
-    modes: ModeTree,
+    pub modes: ModeTree,
 }
 
 impl Config {
@@ -118,10 +117,6 @@ impl Config {
         self.deepspeech_config = self.deepspeech_config.or_else(other.deepspeech_config);
         self.modes = self.modes.or_else(other.modes)?;
         Ok(self)
-    }
-
-    pub fn commands_for_mode(&self, mode: Option<impl AsRef<str>>) -> Option<&[Command]> {
-        self.modes.commands_for_mode(mode)
     }
 }
 

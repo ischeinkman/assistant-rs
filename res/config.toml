@@ -3,7 +3,7 @@ model-path = "/home/ilan/Programs/native_client_deepspeech/deepspeech-0.7.4-mode
 #scorer-path = "/home/ilan/Downloads/deepspeech-0.7.4-models.scorer"
 
 [[command]]
-message = "firefox"
+message = "fire fox"
 mode = "firefox"
 
 [[command]]
