@@ -1,11 +1,12 @@
 use crate::buffer::{AudioReciever, SpeechLoader};
 use crate::config;
 use crate::config::{Config, DeepspeechConfig};
-use crate::error::AssistantRsError;
+use crate::error::{AssistantRsError, CpalError};
 use crate::metrics;
 use crate::modes::Command;
-
+use crate::utils::CpalDeviceUtils;
 use cpal::traits::HostTrait;
+use cpal::BuildStreamError;
 use deepspeech::dynamic::Model;
 
 use std::path::PathBuf;
@@ -165,7 +166,32 @@ fn build_audio_stream(sample_rate: u32) -> Result<AudioReciever, AssistantRsErro
         channels: 1,
         sample_rate: cpal::SampleRate(sample_rate),
     };
-    AudioReciever::construct(&dev, &stream_conf)
+    let res = AudioReciever::construct(&dev, &stream_conf);
+    let try_other = matches!(
+        res,
+        Err(AssistantRsError::Cpal(CpalError::BuildStream(
+            BuildStreamError::StreamConfigNotSupported
+        )))
+    );
+    if !try_other {
+        return res;
+    }
+
+    // If the default input does not support what we need, find one that does.
+    let format = cpal::SampleFormat::I16;
+    let host_ids = cpal::available_hosts().into_iter();
+    let working_hosts = host_ids.filter_map(|id| cpal::host_from_id(id).ok());
+
+    // Get an iterator over all inputs that support what we need
+    let mut valid_inputs = working_hosts
+        .filter_map(|host| host.input_devices().ok())
+        .flatten()
+        .filter(|dev| dev.input_supports(&stream_conf, format).unwrap_or(false));
+
+    // Return the first usable, or `MicrophoneNotFound` on error.
+    valid_inputs
+        .find_map(|dev| AudioReciever::construct(&dev, &stream_conf).ok())
+        .ok_or(AssistantRsError::MicrophoneNotFound)
 }
 
 fn get_raw_utterance(model: &mut Model) -> Result<String, AssistantRsError> {

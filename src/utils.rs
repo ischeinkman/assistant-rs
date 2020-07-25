@@ -121,6 +121,67 @@ impl<'a> Iterator for SplitOwned<'a> {
     }
 }
 
+use cpal::traits::DeviceTrait;
+use cpal::{
+    Device, SampleFormat, StreamConfig, SupportedStreamConfig, SupportedStreamConfigRange,
+    SupportedStreamConfigsError,
+};
+
+pub trait SupportsConfigUtils {
+    fn supports(&self, conf: &StreamConfig, format: SampleFormat) -> bool;
+}
+
+impl SupportsConfigUtils for SupportedStreamConfig {
+    fn supports(&self, conf: &StreamConfig, format: SampleFormat) -> bool {
+        self.sample_format() == format
+            && self.channels() == conf.channels
+            && self.sample_rate() == conf.sample_rate
+    }
+}
+
+impl SupportsConfigUtils for SupportedStreamConfigRange {
+    fn supports(&self, conf: &StreamConfig, format: SampleFormat) -> bool {
+        self.sample_format() == format
+            && self.channels() == conf.channels
+            && self.min_sample_rate() <= conf.sample_rate
+            && self.max_sample_rate() >= conf.sample_rate
+    }
+}
+
+pub trait CpalDeviceUtils {
+    fn input_supports(
+        &self,
+        conf: &StreamConfig,
+        format: SampleFormat,
+    ) -> Result<bool, SupportedStreamConfigsError>;
+    fn output_supports(
+        &self,
+        conf: &StreamConfig,
+        format: SampleFormat,
+    ) -> Result<bool, SupportedStreamConfigsError>;
+}
+
+impl CpalDeviceUtils for Device {
+    fn input_supports(
+        &self,
+        conf: &StreamConfig,
+        format: SampleFormat,
+    ) -> Result<bool, SupportedStreamConfigsError> {
+        Ok(self
+            .supported_input_configs()?
+            .any(|cfg| cfg.supports(conf, format)))
+    }
+    fn output_supports(
+        &self,
+        conf: &StreamConfig,
+        format: SampleFormat,
+    ) -> Result<bool, SupportedStreamConfigsError> {
+        Ok(self
+            .supported_output_configs()?
+            .any(|cfg| cfg.supports(conf, format)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
