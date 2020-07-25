@@ -44,7 +44,13 @@ impl AssistantContext {
 
     pub fn run(&mut self) -> Result<(), AssistantRsError> {
         let mut cur_mode = run_single(&mut self.model, &self.config, None)?;
+        log::log!(log::Level::Debug, "Starting run.");
         while cur_mode.is_some() {
+            log::log!(
+                log::Level::Debug,
+                "Next mode: {}",
+                cur_mode.as_ref().unwrap()
+            );
             cur_mode = run_single(
                 &mut self.model,
                 &self.config,
@@ -64,8 +70,6 @@ fn run_single(
     config: &Config,
     current_mode: Option<&str>,
 ) -> Result<Option<String>, AssistantRsError> {
-    log::log!(log::Level::Debug, "Starting new run.");
-
     // Get the raw transcription of the audio.
     let final_msg = get_raw_utterance(model)?;
     let final_msg = final_msg.trim();
@@ -73,7 +77,8 @@ fn run_single(
 
     // Match the command, currently via minimum edit distance.
     let (commands, next_mode) = match_commands(&config.modes, current_mode, final_msg);
-
+    log::log!(log::Level::Debug, "Command buff: {:?}", commands);
+    log::log!(log::Level::Debug, "Returned mode: {:?}", next_mode);
     // Run the matched commands.
     for cmd in commands.into_iter() {
         run_command(&cmd)?;
@@ -106,26 +111,28 @@ fn match_commands<'a>(
     let mut command_buff = Vec::new();
     let mut str_buff = "".to_owned();
     loop {
-        println!("Current buff : {:?}", str_buff);
         // Get all the edges from this node
         let current_commands = conf.commands_for_mode(mode);
 
         // Tries to match the next edge from the current
         let mut matched_cmd: Option<&Command> = None;
+        let mut matched_cmd_dist = crate::metrics::leven_dist(&str_buff, raw_text);
         for cur in current_commands {
-            // The initial match is whether or not the previous buffer compounded with the current node is
-            // better than just the buffer; as such, the buffer is padded with spaces to accurately measure the distance.
-            let equivalent_matched_msg = match matched_cmd {
-                Some(cmd) => format!("{} {}", str_buff, cmd.message()),
-                None => format!("{} {}", str_buff, " ".repeat(cur.message().len())),
-            };
-            let matched_dist = metrics::leven_dist(&equivalent_matched_msg, raw_text);
+            // If the message is blank, this is the "default" end command.
+            // Only run it if we didn't already find a better match.
+            if cur.message().trim().is_empty() {
+                if matched_cmd.is_none() {
+                    matched_cmd = Some(cur);
+                }
+                continue;
+            }
+
             let cur_msg = format!("{} {}", str_buff, cur.message());
             let cur_dist = metrics::leven_dist(&cur_msg, raw_text);
             let is_initial_cmd = str_buff.is_empty() && matched_cmd.is_none();
-            println!("   Test: {} => {} (vs {})", cur_msg, cur_dist, matched_dist);
-            if cur_dist < matched_dist || is_initial_cmd {
+            if cur_dist < matched_cmd_dist || is_initial_cmd {
                 matched_cmd = Some(cur);
+                matched_cmd_dist = cur_dist;
             }
         }
 
@@ -134,16 +141,14 @@ fn match_commands<'a>(
             if let Some(term_cmd) = cmd.command() {
                 command_buff.push(term_cmd);
             }
-            if let Some(nxt_mode) = cmd.next_mode() {
-                mode = Some(nxt_mode);
+            mode = cmd.next_mode();
+            if mode.is_some() {
                 str_buff.push(' ');
-                str_buff.push_str(&nxt_mode);
-            } else {
-                break;
+                str_buff.push_str(cmd.message());
             }
         }
-        // Otherwise, return our new information
-        else {
+        // If we did not progress or progressed to a terminal node, break
+        if matched_cmd.is_none() || mode.is_none() {
             break;
         }
     }
