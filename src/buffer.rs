@@ -107,11 +107,7 @@ impl<T: Clone> WaitableBuffer<T> {
         let start = std::time::Instant::now();
         let end = start + timeout;
         let mut lock = self.data.lock().unwrap_or_else(|e| e.into_inner());
-        loop {
-            // Loop since Condvars can be woken up randomly.
-            if lock.len() >= target {
-                break;
-            }
+        while lock.len() < target {
             // Check if we timed out yet.
             let now = std::time::Instant::now();
             if now > end {
