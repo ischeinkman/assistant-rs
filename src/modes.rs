@@ -88,6 +88,7 @@ impl ModeTree {
             return Err(ConfigError::NoCommands);
         }
         let mut mode_keys: HashSet<_> = HashSet::new();
+        let mut back_refs : HashSet<_> = HashSet::new();
         for md in &self.submodes {
             if md.commands.is_empty() {
                 return Err(ConfigError::EmptyMode(md.name.to_owned()));
@@ -102,6 +103,12 @@ impl ModeTree {
         for md in mode_refs {
             if !mode_keys.contains(md) {
                 return Err(ConfigError::ModeNotFound(md.to_owned()));
+            }
+            back_refs.insert(md);
+        }
+        for defined in mode_keys {
+            if !back_refs.contains(defined) {
+                return Err(ConfigError::UnreachableMode(defined.to_owned()));
             }
         }
         Ok(())

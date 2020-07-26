@@ -49,6 +49,10 @@ pub enum ConfigError {
     
     #[error("message {0} was defined multiple times")]
     DuplicateMessage(String), 
+
+    #[error("mode {0} was defined, but cannot be reached in the mode tree")]
+    UnreachableMode(String), 
+
 }
 
 #[derive(Error, Debug)]
