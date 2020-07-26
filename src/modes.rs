@@ -170,7 +170,7 @@ pub struct CommandMessage {
 
 impl CommandMessage {
     pub fn from_raw(raw: String) -> Result<Self, PhonemeConvertionError> {
-        let phones = Utterance::parse(&raw)?;
+        let phones = Utterance::parse_with_unknowns(&raw);
         Ok(Self { raw, phones })
     }
 }
