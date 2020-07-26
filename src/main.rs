@@ -8,8 +8,8 @@ mod modes;
 mod speech;
 mod utils;
 use crate::args::Args;
+use crate::context::AssistantContext;
 
-use nix::sys::signal::{SigSet, Signal};
 use structopt::StructOpt;
 
 use simplelog::{LevelFilter, TermLogger, TerminalMode};
@@ -22,13 +22,26 @@ fn main() {
     )
     .unwrap();
     let args = Args::from_args();
-    let mut waiter = SigSet::empty();
-    let paths = args.conf_paths().collect();
-    let mut ctx = crate::context::AssistantContext::init_from_paths(paths).unwrap();
-    if !args.daemonize() {
+        let paths = args.conf_paths().collect();
+        let mut ctx = AssistantContext::init_from_paths(paths).unwrap();
+    if args.daemonize() {
+        run_daemon(ctx)
+    } else {
         ctx.run().unwrap();
-        return;
     }
+}
+
+#[cfg(not(target_family = "unix"))]
+fn run_daemon(ctx : AssistantContext) {
+    eprintln!("Error: daemonization is not currently supported on this opperating system.");
+    std::process::exit(-1);
+}
+
+#[cfg(target_family = "unix")]
+fn run_daemon(mut ctx : AssistantContext) {
+    use nix::sys::signal::{SigSet, Signal};
+
+    let mut waiter = SigSet::empty();
     waiter.add(Signal::SIGUSR1);
     waiter.add(Signal::SIGCONT);
     waiter.add(Signal::SIGHUP);

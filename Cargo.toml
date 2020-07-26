@@ -14,9 +14,11 @@ arpabet = "1.0"
 crossbeam = "0.7"
 thiserror = "1.0"
 structopt = "0.3"
-nix = "0.17"
 log = "0.4"
 simplelog="0.8"
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.17"
 
 #[profile.release]
 #debug=true
