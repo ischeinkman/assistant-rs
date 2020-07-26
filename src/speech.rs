@@ -44,6 +44,7 @@ impl Utterance {
 
     /// Attemts to parse a string into its pronounciation, erroring if `raw_msg` contains a word
     /// whose pronounciation cannot be found.
+    #[allow(unused)]
     pub fn parse(raw_msg: &str) -> Result<Self, PhonemeConvertionError> {
         let phones = conv(raw_msg)
             .map(|p| match p {

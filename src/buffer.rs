@@ -60,6 +60,7 @@ impl SpeechLoader {
     }
 
     /// Gets the total number of samples that were `push`ed to this loader.
+    #[allow(unused)]
     pub fn num_samples(&self) -> usize {
         self.total_samples
     }
